@@ -5,7 +5,7 @@ const { URL } = require('url');
 // Cached files and cache duration (1 hour in milliseconds)
 const cacheDuration = 60 * 60 * 1000;
 const cache = {};
-const cacheableFiles = ['/plop.mp3', '/index.html']; // Add files here
+const cacheableFiles = ['/plop.mp3', '/']; // Add files here
 
 // Fetch and cache the file from na.worldguessr.com
 function fetchAndCacheFile(path, callback) {
