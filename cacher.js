@@ -10,27 +10,30 @@ const cacheableFiles = ['/plop.mp3', '/']; // Add files here
 // Fetch and cache the file from na.worldguessr.com
 function fetchAndCacheFile(path, callback) {
   const options = {
-    hostname: 'na.worldguessr.com',
+    hostname: 'demo.worldguessr.com',
     path: path,
     method: 'GET',
-    rejectUnauthorized: false, // Disable SSL certificate verification for development
+    rejectUnauthorized: false,
     headers: {
-      'Host': 'na.worldguessr.com', // Add the Host header
+      'Host': 'demo.worldguessr.com', // Add the Host header
     }
   };
 
   https.get(options, (res) => {
     let data = '';
 
+    // Collect data as it comes in chunks
     res.on('data', (chunk) => {
       data += chunk;
     });
 
+    // Once the entire file is received
     res.on('end', () => {
+      // Cache the file content and the timestamp
       cache[path] = {
         content: data,
         timestamp: Date.now(),
-        headers: res.headers,
+        headers: res.headers, // Cache response headers like content-type
       };
       callback(null, data, res.headers);
     });
@@ -44,21 +47,19 @@ function fetchAndCacheFile(path, callback) {
 function serveFromCacheOrFetch(path, res) {
   const cached = cache[path];
 
+  // Check if cache exists and is still valid
   if (cached && (Date.now() - cached.timestamp < cacheDuration)) {
     console.log(`Serving ${path} from cache`);
     res.writeHead(200, cached.headers);
     res.end(cached.content);
   } else {
-    console.log(`Fetching ${path} from origin`);
+    console.log(`Caching ${path} from origin`);
     fetchAndCacheFile(path, (err, data, headers) => {
       if (err) {
         res.writeHead(500, { 'Content-Type': 'text/plain' });
         return res.end('Error fetching file');
       }
-      res.writeHead(200, {
-        ...headers,
-        'Access-Control-Allow-Origin': '*', // Handle CORS by allowing all origins
-      });
+      res.writeHead(200, headers);
       res.end(data);
     });
   }
@@ -67,20 +68,18 @@ function serveFromCacheOrFetch(path, res) {
 // Proxy request to na.worldguessr.com if not cached
 function proxyRequest(req, res) {
   const options = {
-    hostname: 'na.worldguessr.com',
+    hostname: 'demo.worldguessr.com',
     path: req.url,
     method: req.method,
+    headers: req.headers,
+    rejectUnauthorized: false,
     headers: {
-      ...req.headers,
-      'Host': 'na.worldguessr.com',
-    },
+      'Host': 'demo.worldguessr.com', // Add the Host header
+    }
   };
 
   const proxy = https.request(options, (proxyRes) => {
-    res.writeHead(proxyRes.statusCode, {
-      ...proxyRes.headers,
-      'Access-Control-Allow-Origin': '*', // Handle CORS by allowing all origins
-    });
+    res.writeHead(proxyRes.statusCode, proxyRes.headers);
     proxyRes.pipe(res, { end: true });
   });
 
@@ -97,11 +96,13 @@ function proxyRequest(req, res) {
 http.createServer((req, res) => {
   const path = new URL(req.url, `http://${req.headers.host}`).pathname;
 
+  // If the request is for a cached file
   if (cacheableFiles.includes(path)) {
     serveFromCacheOrFetch(path, res);
   } else {
+    console.log(`Proxying request for ${path}`);
     proxyRequest(req, res);
   }
-}).listen(8080, () => {
-  console.log('Server running on http://localhost:8080');
+}).listen(process.env.PORT || 8080, () => {
+  console.log('Server running on http://localhost:'+ (process.env.PORT || 8080));
 });
